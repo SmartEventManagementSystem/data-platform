@@ -1,0 +1,26 @@
+{
+  "name": "ems-postgres-source",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "postgres-events",
+    "database.port": "5432",
+    "database.user": "emsuser",
+    "database.password": "emspass123",
+    "database.dbname": "ems_events",
+    "database.server.name": "ems-postgres",
+    "table.include.list": "public.events,public.users,public.tickets",
+    "plugin.name": "pgoutput",
+    "publication.autocreate.mode": "filtered",
+    "slot.name": "ems_slot",
+    "slot.delete.on.stop": "true",
+    "topic.prefix": "ems",
+    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter.schemas.enable": "false",
+    "snapshot.mode": "initial",
+    "include.schema.changes": "true",
+    "transforms": "unwrap",
+    "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState"
+  }
+}
