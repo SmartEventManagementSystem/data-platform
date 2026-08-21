@@ -49,7 +49,7 @@ services:
       - dataplatform
 
   postgres-om:
-    image: postgres:15-alpine
+    image: postgres:15
     hostname: postgres-om
     container_name: ems-postgres-om
     environment:
@@ -67,6 +67,28 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # MySQL for OpenMetadata (tested and supported by OM)
+  mysql-om:
+    image: mysql:8.0
+    hostname: mysql-om
+    container_name: ems-mysql-om
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: openmetadata123
+      MYSQL_DATABASE: openmetadata
+      MYSQL_USER: openmetadata
+      MYSQL_PASSWORD: openmetadata123
+    volumes:
+      - mysql-om:/var/lib/mysql
+    networks:
+      - dataplatform
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-popenmetadata123"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
 
   mongodb:
     image: mongo:7.0

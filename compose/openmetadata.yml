@@ -1,5 +1,5 @@
 # ============================================================
-# OpenMetadata - Data Catalog & Discovery (PostgreSQL)
+# OpenMetadata - Data Catalog & Discovery (MySQL)
 # ============================================================
 
 services:
@@ -27,33 +27,42 @@ services:
       retries: 5
 
   openmetadata:
-    image: openmetadata/server:1.7.4
+    image: openmetadata/server:1.5.0
     hostname: openmetadata
     container_name: ems-openmetadata
     ports:
       - "8585:8585"
       - "8586:8586"
     environment:
-      DB_HOST: postgres-om
-      DB_PORT: 5432
+      # MySQL configuration (OM default)
+      DB_HOST: mysql-om
+      DB_PORT: 3306
       DB_USER: openmetadata
-      DB_USER_PASSWORD: openmetadata123
-      DB_SCHEME: postgresql
-      OM_DATABASE: openmetadata_db
-      OPENMETADATA_VERSION: 1.7.4
+      DB_PASSWORD: openmetadata123
+      DB_SCHEME: mysql
+      OM_DATABASE: openmetadata
+
+      # Server config
+      OPENMETADATA_VERSION: 1.5.0
       SERVER_PORT: 8585
       LOG_LEVEL: INFO
       CUSTOM_OIDC_AUTHENTICATION_ENABLED: 'false'
+
+      # Airflow connection
       AIRFLOW_HOST: airflow-webserver
       AIRFLOW_USERNAME: admin
       AIRFLOW_PASSWORD: admin123
       AIRFLOW_PORT: 8080
+
+      # Elasticsearch
       ELASTICSEARCH_HOST: elasticsearch
       ELASTICSEARCH_PORT: 9200
+
+      # Kafka
       KAFKA_BOOTSTRAPERS: kafka:29092
       KAFKA_SCHEMAREGISTRY: http://schema-registry:8081
     depends_on:
-      postgres-om:
+      mysql-om:
         condition: service_healthy
       elasticsearch:
         condition: service_healthy
@@ -67,7 +76,7 @@ services:
     restart: unless-stopped
 
   openmetadata-ingestion:
-    image: openmetadata/ingestion:1.7.4
+    image: openmetadata/ingestion:1.5.0
     hostname: openmetadata-ingestion
     container_name: ems-openmetadata-ingestion
     depends_on:
@@ -76,12 +85,12 @@ services:
     environment:
       AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      DB_HOST: postgres-om
-      DB_PORT: 5432
+      DB_HOST: mysql-om
+      DB_PORT: 3306
       DB_USER: openmetadata
-      DB_USER_PASSWORD: openmetadata123
-      DB_SCHEME: postgresql
-      OM_DATABASE: openmetadata_db
+      DB_PASSWORD: openmetadata123
+      DB_SCHEME: mysql
+      OM_DATABASE: openmetadata
     volumes:
       - ./dags:/opt/airflow/dags
       - openmetadata-ingestion:/opt/airflow
