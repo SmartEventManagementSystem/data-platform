@@ -121,7 +121,7 @@ docker compose down -v
 
 | Service | URL | Credentials |
 |---------|-----|------------|
-| **OpenMetadata** | http://localhost:8585 | admin / admin123 |
+| **OpenMetadata** | http://localhost:8585 | admin@openmetadata.org / admin |
 | **Kafka UI** | http://localhost:8090 | - |
 | **MinIO Console** | http://localhost:9001 | minioadmin / minioadmin123 |
 | **Trino** | http://localhost:8089 | - |
@@ -130,6 +130,46 @@ docker compose down -v
 | **NiFi** | https://localhost:8443 | - |
 | **Flink** | http://localhost:8083 | - |
 | **MongoDB** | localhost:27017 | emsuser / emspass123 |
+| **Airflow** | http://localhost:8085 | admin / admin123 |
+| **Superset** | http://localhost:8088 | admin / admin123 |
+| **Redis Commander** | http://localhost:8096 | - |
+
+## Service Credentials Summary
+
+### OpenMetadata
+- **Email**: admin@openmetadata.org
+- **Password**: admin
+- **API Token**: Generate from Settings → Bots → admin
+
+### Airflow
+- **Username**: admin
+- **Password**: admin123
+
+### Superset
+- **Username**: admin
+- **Password**: admin123
+
+### MinIO
+- **Access Key**: minioadmin
+- **Secret Key**: minioadmin123
+
+### PostgreSQL Databases
+| Database | Host | Port | User | Password |
+|----------|------|------|------|----------|
+| Events | ems-postgres-events | 5432 | emsuser | emspass123 |
+| OpenMetadata | ems-postgres-om | 5436 | openmetadata | openmetadata123 |
+| Airflow | ems-postgres-airflow | 5434 | airflow | airflow123 |
+| Superset | ems-postgres-superset | 5435 | superset | superset123 |
+
+### MongoDB
+- **Username**: emsuser
+- **Password**: emspass123
+- **Database**: ems_analytics
+
+### Redis
+- **Auth Redis**: localhost:6379 (no password)
+- **Airflow Redis**: localhost:6381 (no password)
+- **Local Redis**: localhost:6380 (no password)
 
 ## Database Connections
 
@@ -155,10 +195,33 @@ docker compose down -v
 OpenMetadata is pre-configured with PostgreSQL driver (not MySQL).
 
 1. Go to http://localhost:8585
-2. Login with admin / admin123
-3. Configure services:
-   - Kafka: kafka:29092
-   - Database: postgres-events:5432 (emsuser/emspass123)
+2. Login with:
+   - **Email**: admin@openmetadata.org
+   - **Password**: admin
+3. Configure services via Settings → Services:
+   - **Database Services**: Add PostgreSQL connections
+   - **Messaging Services**: Add Kafka (kafka:29092)
+   - **Pipeline Services**: Add Airflow (ems-airflow-webserver:8080)
+
+### Connecting to PostgreSQL from OpenMetadata
+```
+Host: ems-postgres-events
+Port: 5432
+Database: ems_events
+Username: emsuser
+Password: emspass123
+```
+
+### Connecting Airflow to OpenMetadata
+```
+Airflow Host: ems-airflow-webserver
+Airflow Port: 8080
+Metadata DB Host: ems-postgres-airflow
+Metadata DB Port: 5432
+Metadata DB: airflow
+Username: airflow
+Password: airflow123
+```
 
 ## Trino Query Engine
 
