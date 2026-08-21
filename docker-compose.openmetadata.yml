@@ -2,8 +2,6 @@
 # Run with: docker compose -f docker-compose.yml -f docker-compose.openmetadata.yml up -d
 # NOTE: Uses PostgreSQL driver (not MySQL)
 
-version: '3.8'
-
 services:
   # PostgreSQL for OpenMetadata (replaces MySQL)
   openmetadata-db:
