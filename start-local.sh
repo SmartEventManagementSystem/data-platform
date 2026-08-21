@@ -34,17 +34,15 @@ if [[ "${MEMORY%%.*}" -lt 10 ]]; then
     log_warn "Go to Docker Desktop > Settings > Resources to increase memory"
 fi
 
-log_info "Starting EMS Data Platform..."
-log_info "Using PostgreSQL for OpenMetadata (not MySQL)"
+log_info "Starting EMS Data Platform - ALL Services..."
 
 # Stop any existing containers
 log_info "Stopping existing containers..."
 docker compose down 2>/dev/null || docker-compose down 2>/dev/null || true
 
-# Start core infrastructure first (essential for DE)
-CORE_SERVICES="postgres-om postgres-events redis redis-local kafka zookeeper schema-registry elasticsearch"
-log_info "Starting core services..."
-docker compose up -d $CORE_SERVICES 2>/dev/null || docker-compose up -d $CORE_SERVICES 2>/dev/null
+# Start ALL services
+log_info "Starting all services (this may take a few minutes)..."
+docker compose up -d 2>/dev/null || docker-compose up -d 2>/dev/null
 
 # Wait for databases to be ready
 log_info "Waiting for databases to be ready..."
@@ -58,15 +56,6 @@ for i in {1..30}; do
     sleep 2
 done
 echo ""
-
-# Start OpenMetadata
-log_info "Starting OpenMetadata..."
-docker compose up -d openmetadata 2>/dev/null || docker-compose up -d openmetadata 2>/dev/null
-
-# Start data services
-DATA_SERVICES="trino minio mc iceberg-rest kafka-ui"
-log_info "Starting data services (Trino, MinIO, Iceberg)..."
-docker compose up -d $DATA_SERVICES 2>/dev/null || docker-compose up -d $DATA_SERVICES 2>/dev/null
 
 # Wait for OpenMetadata to be healthy
 log_info "Waiting for OpenMetadata (this takes ~2-3 minutes on first start)..."
@@ -83,26 +72,34 @@ echo ""
 # Summary
 echo ""
 log_info "=========================================="
-log_info "EMS Data Platform - All Started"
+log_info "EMS Data Platform - ALL Services Started"
 log_info "=========================================="
 echo ""
 
-docker ps --format "  {{.Names}}: {{.Status}}" | grep ems | grep -v "Exited" | head -20
+docker ps --format "  {{.Names}}: {{.Status}}" | grep ems | grep -v "Exited" | head -25
 
 echo ""
 log_info "Key Services:"
-for port in 5432 6379 6380 8585 8089 9092 8090 9000 9001 9200; do
+for port in 5432 5434 5435 5436 6379 6380 8585 8085 8088 8089 8090 9000 9001 9092 9200 27017 6333 8181; do
     case $port in
         5432) name="PostgreSQL (events)" ;;
+        5434) name="PostgreSQL (airflow)" ;;
+        5435) name="PostgreSQL (superset)" ;;
+        5436) name="PostgreSQL (om)" ;;
         6379) name="Redis (auth)" ;;
         6380) name="Redis (no auth)" ;;
         8585) name="OpenMetadata" ;;
+        8085) name="Airflow" ;;
+        8088) name="Superset" ;;
         8089) name="Trino" ;;
-        9092) name="Kafka" ;;
         8090) name="Kafka UI" ;;
         9000) name="MinIO API" ;;
         9001) name="MinIO Console" ;;
+        9092) name="Kafka" ;;
         9200) name="Elasticsearch" ;;
+        27017) name="MongoDB" ;;
+        6333) name="Qdrant" ;;
+        8181) name="Iceberg REST" ;;
     esac
     if nc -z localhost $port 2>/dev/null; then
         echo -e "  ${GREEN}${name} (:${port}) OK${NC}"
@@ -114,12 +111,15 @@ done
 echo ""
 log_info "Access URLs:"
 echo "  OpenMetadata:   http://localhost:8585"
+echo "  Airflow:        http://localhost:8085"
+echo "  Superset:       http://localhost:8088"
 echo "  Kafka UI:       http://localhost:8090"
 echo "  Trino:          http://localhost:8089"
-echo "  MinIO Console:  http://localhost:9001 (minioadmin/minioadmin123)"
+echo "  MinIO Console:  http://localhost:9001"
+echo "  Elasticsearch:  http://localhost:9200"
+echo "  Qdrant:         http://localhost:6333"
+echo ""
+log_info "Credentials: admin / admin123 (for OpenMetadata, Airflow, Superset)"
 echo ""
 log_info "Full status: docker ps"
 log_info "Logs: docker logs <container-name>"
-echo ""
-log_info "To start optional services (Airflow, Spark, NiFi):"
-log_info "  docker compose --profile full up -d"
