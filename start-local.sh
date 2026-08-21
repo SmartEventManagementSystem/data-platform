@@ -97,6 +97,19 @@ fi
 log_info "Starting all remaining services..."
 docker compose up -d
 
+# Step 6: Install OpenMetadata Airflow APIs
+log_info "Installing OpenMetadata Airflow APIs..."
+for i in {1..20}; do
+    if docker exec ems-airflow-webserver airflow version &>/dev/null; then
+        docker exec ems-airflow-webserver pip install --no-cache-dir openmetadata-ingestion[airflow-base] 2>/dev/null || true
+        log_ok "OpenMetadata Airflow APIs installed!"
+        break
+    fi
+    echo -n "."
+    sleep 5
+done
+echo ""
+
 # Wait for OpenMetadata to be ready
 log_info "Waiting for OpenMetadata to be ready (~2-3 minutes)..."
 for i in {1..60}; do
@@ -159,8 +172,11 @@ echo "  MinIO Console: http://localhost:9001"
 echo "  Elasticsearch: http://localhost:9200"
 echo "  Qdrant:        http://localhost:6333"
 echo ""
-log_info "Credentials: admin / admin123 (OpenMetadata, Airflow, Superset)"
-log_info "             minioadmin / minioadmin (MinIO)"
+log_info "Credentials:"
+log_info "  OpenMetadata: admin@openmetadata.org / admin"
+log_info "  Airflow:     admin / admin123"
+log_info "  Superset:    admin / admin123"
+log_info "  MinIO:       minioadmin / minioadmin123"
 echo ""
 log_info "Commands:"
 echo "  docker compose logs -f        # All logs"
