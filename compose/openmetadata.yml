@@ -1,5 +1,5 @@
 # ============================================================
-# OpenMetadata - Data Catalog & Discovery (MySQL)
+# OpenMetadata - Data Catalog & Discovery (PostgreSQL)
 # ============================================================
 
 services:
@@ -26,6 +26,54 @@ services:
       timeout: 10s
       retries: 5
 
+  # Bootstrap container - runs migrations before OpenMetadata starts
+  openmetadata-bootstrap:
+    image: openmetadata/server:1.5.0
+    hostname: openmetadata-bootstrap
+    container_name: ems-openmetadata-bootstrap
+    environment:
+      DB_DRIVER_CLASS: org.postgresql.Driver
+      DB_SCHEME: postgresql
+      DB_USE_SSL: "false"
+      DB_HOST: postgres-om
+      DB_PORT: 5432
+      DB_USER: openmetadata
+      DB_PASSWORD: openmetadata123
+      DB_DATABASE: openmetadata_db
+      # PostgreSQL connection string (alternative format)
+      DB_URL: jdbc:postgresql://postgres-om:5432/openmetadata_db
+    entrypoint: ["/bin/bash"]
+    command:
+      - -c
+      - |
+        # Build classpath from libs
+        LIBS_DIR=/opt/openmetadata/libs/
+        CLASSPATH=""
+        for file in "$${LIBS_DIR}"*.jar; do
+          [ -f "$$file" ] && CLASSPATH="$${CLASSPATH}:$$file"
+        done
+        # Add bootstrap-specific jar
+        for file in /opt/openmetadata/libs/collate-service-*.jar; do
+          [ -f "$$file" ] && CLASSPATH="$${CLASSPATH}:$$file"
+        done
+
+        echo "Running OpenMetadata migrations..."
+        java -Dbootstrap.dir=/opt/openmetadata/bootstrap \
+             -cp "$${CLASSPATH}" \
+             org.openmetadata.service.util.OpenMetadataOperations \
+             -c /opt/openmetadata/conf/openmetadata.yaml \
+             migrate
+
+        echo "Migrations completed."
+    networks:
+      - dataplatform
+    restart: "no"
+    depends_on:
+      postgres-om:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+
   openmetadata:
     image: openmetadata/server:1.5.0
     hostname: openmetadata
@@ -34,13 +82,17 @@ services:
       - "8585:8585"
       - "8586:8586"
     environment:
-      # MySQL configuration (OM default)
-      DB_HOST: mysql-om
-      DB_PORT: 3306
+      # PostgreSQL driver configuration
+      DB_DRIVER_CLASS: org.postgresql.Driver
+      DB_SCHEME: postgresql
+      DB_USE_SSL: "false"
+
+      # Database connection
+      DB_HOST: postgres-om
+      DB_PORT: 5432
       DB_USER: openmetadata
       DB_PASSWORD: openmetadata123
-      DB_SCHEME: mysql
-      OM_DATABASE: openmetadata
+      DB_DATABASE: openmetadata_db
 
       # Server config
       OPENMETADATA_VERSION: 1.5.0
@@ -62,17 +114,20 @@ services:
       KAFKA_BOOTSTRAPERS: kafka:29092
       KAFKA_SCHEMAREGISTRY: http://schema-registry:8081
     depends_on:
-      mysql-om:
+      openmetadata-bootstrap:
+        condition: service_completed_successfully
+      postgres-om:
         condition: service_healthy
       elasticsearch:
         condition: service_healthy
     networks:
       - dataplatform
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8585/healthcheck || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8585/ > /dev/null || exit 1"]
       interval: 30s
       timeout: 15s
-      retries: 30
+      retries: 10
+      start_period: 120s
     restart: unless-stopped
 
   openmetadata-ingestion:
@@ -85,12 +140,14 @@ services:
     environment:
       AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      DB_HOST: mysql-om
-      DB_PORT: 3306
+      DB_DRIVER_CLASS: org.postgresql.Driver
+      DB_SCHEME: postgresql
+      DB_USE_SSL: "false"
+      DB_HOST: postgres-om
+      DB_PORT: 5432
       DB_USER: openmetadata
       DB_PASSWORD: openmetadata123
-      DB_SCHEME: mysql
-      OM_DATABASE: openmetadata
+      DB_DATABASE: openmetadata_db
     volumes:
       - ./dags:/opt/airflow/dags
       - openmetadata-ingestion:/opt/airflow

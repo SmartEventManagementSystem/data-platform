@@ -15,7 +15,6 @@ volumes:
   postgres-om:
   postgres-events:
   mongodb-data:
-  mysql-om:
   minio-data:
   elasticsearch-data:
   redis-airflow:
