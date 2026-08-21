@@ -1,0 +1,83 @@
+# ============================================================
+# Processing Stack - Flink, NiFi, Debezium
+# ============================================================
+
+services:
+  flink-jobmanager:
+    image: flink:1.19.0
+    hostname: flink-jobmanager
+    container_name: ems-flink-jobmanager
+    ports:
+      - "8083:8081"
+      - "6123:6123"
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: flink-jobmanager
+        state.backend: rocksdb
+        execution.checkpointing.interval: 10000
+        state.checkpoints.dir: s3://datalake/flink-checkpoints
+        state.savepoints.dir: s3://datalake/flink-savepoints
+        iceberg.catalog.rest: http://iceberg-rest:8181
+        s3.access-key: minioadmin
+        s3.secret-key: minioadmin123
+        s3.endpoint: http://minio:9000
+        s3.path.style-access: true
+    volumes:
+      - flink-jobmanager-data:/opt/flink/data
+    networks:
+      - dataplatform
+
+  flink-taskmanager1:
+    image: flink:1.19.0
+    hostname: flink-taskmanager1
+    container_name: ems-flink-taskmanager1
+    depends_on:
+      - flink-jobmanager
+    command: taskmanager
+    scale: 1
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: flink-jobmanager
+        taskmanager.numberOfTaskSlots: 4
+        state.backend: rocksdb
+    volumes:
+      - flink-taskmanager1-data:/opt/flink/data
+    networks:
+      - dataplatform
+
+  debezium:
+    image: debezium/server:2.5
+    hostname: debezium
+    container_name: ems-debezium
+    ports:
+      - "9086:8080"
+    environment:
+      OFFSET_STORAGE_FILE_FILENAME: /opt/debezium/data/offsets.dat
+      CONFIG_STORAGE_FILE_FILENAME: /opt/debezium/data/connectors.dat
+      BOOTSTRAP_SERVERS: kafka:29092
+    volumes:
+      - debezium-data:/opt/debezium/data
+    networks:
+      - dataplatform
+
+  nifi:
+    image: apache/nifi:2.0.0
+    hostname: nifi
+    container_name: ems-nifi
+    ports:
+      - "8443:8443"
+      - "8084:8080"
+    environment:
+      NIFI_WEB_HTTP_PORT: 8443
+      NIFI_WEB_HTTP_HOST: 0.0.0.0
+      NIFI_BOOTSTRAP_TIMEOUT: 600
+      NIFI_ELECTION_MAX_WAIT: 600
+      NIFI_SENSITIVE_PROPS_KEY: nifi_sensitive_props_key_ems_change_me
+      NIFI_JVM_HEAP_MAX: 2g
+      NIFI_JVM_HEAP_INIT: 1g
+    volumes:
+      - nifi-data:/opt/nifi/nifi-current/data
+    networks:
+      - dataplatform

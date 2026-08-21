@@ -1,0 +1,89 @@
+# ============================================================
+# Databases Stack - PostgreSQL, MongoDB
+# ============================================================
+
+services:
+  postgres-events:
+    image: postgres:15-alpine
+    hostname: postgres-events
+    container_name: ems-postgres-events
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: emsuser
+      POSTGRES_PASSWORD: emspass123
+      POSTGRES_DB: ems_events
+    volumes:
+      - postgres-events:/var/lib/postgresql/data
+    networks:
+      - dataplatform
+
+  postgres-airflow:
+    image: postgres:15-alpine
+    hostname: postgres-airflow
+    container_name: ems-postgres-airflow
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow123
+      POSTGRES_DB: airflow
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres-airflow:/var/lib/postgresql/data
+    networks:
+      - dataplatform
+
+  postgres-superset:
+    image: postgres:15-alpine
+    hostname: postgres-superset
+    container_name: ems-postgres-superset
+    environment:
+      POSTGRES_USER: superset
+      POSTGRES_PASSWORD: superset123
+      POSTGRES_DB: superset
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres-superset:/var/lib/postgresql/data
+    networks:
+      - dataplatform
+
+  postgres-om:
+    image: postgres:15-alpine
+    hostname: postgres-om
+    container_name: ems-postgres-om
+    environment:
+      POSTGRES_USER: openmetadata
+      POSTGRES_PASSWORD: openmetadata123
+      POSTGRES_DB: openmetadata_db
+    ports:
+      - "5436:5432"
+    volumes:
+      - postgres-om:/var/lib/postgresql/data
+    networks:
+      - dataplatform
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openmetadata"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongodb:
+    image: mongo:7.0
+    hostname: mongodb
+    container_name: ems-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: emsuser
+      MONGO_INITDB_ROOT_PASSWORD: emspass123
+      MONGO_INITDB_DATABASE: ems_analytics
+    volumes:
+      - mongodb-data:/data/db
+    networks:
+      - dataplatform
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5

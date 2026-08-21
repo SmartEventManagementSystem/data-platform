@@ -1,97 +1,21 @@
-# OpenMetadata - Optional add-on for EMS Data Platform
+# ============================================================
+# OpenMetadata Standalone - Alternative to embedded OpenMetadata
+# Use this if you want OpenMetadata as a separate deployment
+#
 # Run with: docker compose -f docker-compose.yml -f docker-compose.openmetadata.yml up -d
 # NOTE: Uses PostgreSQL driver (not MySQL)
+# ============================================================
+
+include:
+  - path: compose/base.yml
+  - path: compose/kafka.yml
+  - path: compose/databases.yml
+  - path: compose/openmetadata.yml
 
 services:
-  # PostgreSQL for OpenMetadata (replaces MySQL)
-  openmetadata-db:
-    image: postgres:15-alpine
-    hostname: openmetadata-db
-    container_name: ems-openmetadata-db
-    ports:
-      - "5437:5432"
+  # Override postgres-om to use separate database for standalone OM
+  postgres-om:
     environment:
       POSTGRES_USER: openmetadata
       POSTGRES_PASSWORD: openmetadata123
-      POSTGRES_DB: openmetadata_db
-    volumes:
-      - openmetadata-db:/var/lib/postgresql/data
-    networks:
-      - dataplatform
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U openmetadata"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
-
-  openmetadata:
-    image: openmetadata/server:1.7.4
-    hostname: openmetadata
-    container_name: ems-openmetadata
-    ports:
-      - "8585:8585"
-      - "8586:8586"
-    environment:
-      DB_HOST: openmetadata-db
-      DB_PORT: 5432
-      DB_USER: openmetadata
-      DB_PASSWORD: openmetadata123
-      DB_SCHEME: postgresql
-      DB_DATABASE_NAME: openmetadata_db
-      OPENMETADATA_VERSION: 1.7.4
-      SERVER_PORT: 8585
-      LOG_LEVEL: INFO
-      CUSTOM_OIDC_AUTHENTICATION_ENABLED: 'false'
-      AIRFLOW_HOST: airflow-webserver
-      AIRFLOW_USERNAME: admin
-      AIRFLOW_PASSWORD: admin123
-      AIRFLOW_PORT: 8080
-      ELASTICSEARCH_HOST: elasticsearch
-      ELASTICSEARCH_PORT: 9200
-      KAFKA_BOOTSTRAPERS: kafka:29092
-      KAFKA_SCHEMAREGISTRY: http://schema-registry:8081
-    depends_on:
-      openmetadata-db:
-        condition: service_healthy
-      elasticsearch:
-        condition: service_healthy
-    networks:
-      - dataplatform
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8585/healthcheck || exit 1"]
-      interval: 30s
-      timeout: 15s
-      retries: 20
-    restart: unless-stopped
-
-  openmetadata-ingestion:
-    image: openmetadata/ingestion:1.7.4
-    hostname: openmetadata-ingestion
-    container_name: ems-openmetadata-ingestion
-    depends_on:
-      - openmetadata
-      - postgres-airflow
-    environment:
-      AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      DB_HOST: openmetadata-db
-      DB_PORT: 5432
-      DB_USER: openmetadata
-      DB_PASSWORD: openmetadata123
-      DB_SCHEME: postgresql
-      DB_DATABASE_NAME: openmetadata_db
-    volumes:
-      - ./dags:/opt/airflow/dags
-      - openmetadata-ingestion:/opt/airflow
-    networks:
-      - dataplatform
-    restart: unless-stopped
-
-volumes:
-  openmetadata-db:
-
-networks:
-  dataplatform:
-    name: ems-dataplatform
-    external: true
+      POSTGRES_DB: openmetadata_standalone

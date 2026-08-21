@@ -1,0 +1,139 @@
+# ============================================================
+# Apache Airflow - Pipeline Orchestration
+# ============================================================
+
+services:
+  airflow-init:
+    image: apache/airflow:2.9.0-python3.11
+    hostname: airflow-init
+    container_name: ems-airflow-init
+    depends_on:
+      - postgres-airflow
+      - redis-airflow
+    environment:
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow123@postgres-airflow:5432/airflow
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow123@postgres-airflow:5432/airflow
+      AIRFLOW__CELERY__BROKER_URL: redis://:@redis-airflow:6381/0
+      AIRFLOW__CORE__FERNET_KEY: D5k7VhVYGpLqII8dXCvqRUW3V3e8xQ9mNpK2sT4wX7Y=
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+      AIRFLOW__ETERS__ENABLED: 'true'
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: admin
+      _AIRFLOW_WWW_USER_PASSWORD: admin123
+    user: "0:0"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./plugins:/opt/airflow/plugins
+    command: bash -c "airflow db migrate && airflow users create -r Admin -u admin -e admin@ems.local -p admin123 -f Admin -l User || true"
+    networks:
+      - dataplatform
+    restart: "no"
+
+  airflow-webserver:
+    image: apache/airflow:2.9.0-python3.11
+    hostname: airflow-webserver
+    container_name: ems-airflow-webserver
+    depends_on:
+      - postgres-airflow
+      - redis-airflow
+      - airflow-init
+    environment:
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow123@postgres-airflow:5432/airflow
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow123@postgres-airflow:5432/airflow
+      AIRFLOW__CELERY__BROKER_URL: redis://:@redis-airflow:6381/0
+      AIRFLOW__CORE__FERNET_KEY: D5k7VhVYGpLqII8dXCvqRUW3V3e8xQ9mNpK2sT4wX7Y=
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+      AIRFLOW__WEBSERVER__BASE_URL: http://localhost:8085
+      AIRFLOW__WEBSERVER__WORKERS: 2
+      AIRFLOW__WEBSERVER__WORKER_REFRESH_BATCH_SIZE: 1
+      AIRFLOW__WEBSERVER__WORKER_REFRESH_INTERVAL: 6000
+    ports:
+      - "8085:8080"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./plugins:/opt/airflow/plugins
+      - airflow-logs:/opt/airflow/logs
+    command: webserver
+    networks:
+      - dataplatform
+
+  airflow-scheduler:
+    image: apache/airflow:2.9.0-python3.11
+    hostname: airflow-scheduler
+    container_name: ems-airflow-scheduler
+    depends_on:
+      - postgres-airflow
+      - redis-airflow
+      - airflow-init
+    environment:
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow123@postgres-airflow:5432/airflow
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow123@postgres-airflow:5432/airflow
+      AIRFLOW__CELERY__BROKER_URL: redis://:@redis-airflow:6381/0
+      AIRFLOW__CORE__FERNET_KEY: D5k7VhVYGpLqII8dXCvqRUW3V3e8xQ9mNpK2sT4wX7Y=
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__SCHEDULER__MAX_TI_RUNS: 5
+      AIRFLOW__SCHEDULER__SCHEDULER_HEARTBEAT_SEC: 60
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./plugins:/opt/airflow/plugins
+      - airflow-logs:/opt/airflow/logs
+    command: scheduler
+    networks:
+      - dataplatform
+
+  airflow-triggerer:
+    image: apache/airflow:2.9.0-python3.11
+    hostname: airflow-triggerer
+    container_name: ems-airflow-triggerer
+    depends_on:
+      - postgres-airflow
+      - redis-airflow
+      - airflow-init
+    environment:
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow123@postgres-airflow:5432/airflow
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow123@postgres-airflow:5432/airflow
+      AIRFLOW__CELERY__BROKER_URL: redis://:@redis-airflow:6381/0
+      AIRFLOW__CORE__FERNET_KEY: D5k7VhVYGpLqII8dXCvqRUW3V3e8xQ9mNpK2sT4wX7Y=
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./plugins:/opt/airflow/plugins
+      - airflow-logs:/opt/airflow/logs
+    command: triggerer
+    networks:
+      - dataplatform
+
+  airflow-worker:
+    image: apache/airflow:2.9.0-python3.11
+    hostname: airflow-worker
+    container_name: ems-airflow-worker
+    depends_on:
+      - postgres-airflow
+      - redis-airflow
+      - airflow-init
+    environment:
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow123@postgres-airflow:5432/airflow
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow123@postgres-airflow:5432/airflow
+      AIRFLOW__CELERY__BROKER_URL: redis://:@redis-airflow:6381/0
+      AIRFLOW__CORE__FERNET_KEY: D5k7VhVYGpLqII8dXCvqRUW3V3e8xQ9mNpK2sT4wX7Y=
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./plugins:/opt/airflow/plugins
+      - airflow-logs:/opt/airflow/logs
+    command: celery worker
+    networks:
+      - dataplatform

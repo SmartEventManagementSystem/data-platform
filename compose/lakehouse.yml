@@ -1,0 +1,158 @@
+# ============================================================
+# Lakehouse Stack - Iceberg, MinIO (S3 Storage)
+# ============================================================
+
+services:
+  minio:
+    image: minio/minio:latest
+    hostname: minio
+    container_name: ems-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+      MINIO_SITE_NAME: ems-minio
+      MINIO_SITE_REGION: us-east-1
+    volumes:
+      - minio-data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - dataplatform
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  mc:
+    image: minio/mc:latest
+    hostname: mc
+    container_name: ems-mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 10 &&
+      mc alias set ems http://minio:9000 minioadmin minioadmin123 &&
+      mc mb ems/warehouse --ignore-existing &&
+      mc mb ems/spark-warehouse --ignore-existing &&
+      mc mb ems/datalake --ignore-existing &&
+      mc anonymous set public ems/warehouse &&
+      mc anonymous set download ems/datalake &&
+      exit 0;
+      "
+    networks:
+      - dataplatform
+
+  iceberg-rest:
+    image: tabulario/iceberg-rest:1.6.0
+    hostname: iceberg-rest
+    container_name: ems-iceberg-rest
+    ports:
+      - "8181:8181"
+      - "8182:8182"
+    environment:
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin123
+      AWS_REGION: us-east-1
+      CATALOG_WAREHOUSE: s3://warehouse/
+      CATALOG_S3_ENDPOINT: http://minio:9000
+      CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
+    depends_on:
+      - minio
+    networks:
+      - dataplatform
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8181/v1/namespaces"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  iceberg-catalog:
+    image: tabulario/iceberg-rest:1.6.0
+    hostname: iceberg-catalog
+    container_name: ems-iceberg-catalog
+    ports:
+      - "8183:8181"
+      - "8184:8182"
+    environment:
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin123
+      AWS_REGION: us-east-1
+      CATALOG_WAREHOUSE: s3://warehouse/
+      CATALOG_S3_ENDPOINT: http://minio:9000
+      CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
+      CATALOG_PROPERTIES: >-
+        s3.endpoint=http://minio:9000
+        s3.access-key-id=minioadmin
+        s3.secret-access-key=minioadmin123
+        aws.region=us-east-1
+    depends_on:
+      - minio
+    networks:
+      - dataplatform
+
+  spark-iceberg:
+    image: tabulario/spark-iceberg:3.5.5_1.8.1
+    hostname: spark-iceberg
+    container_name: ems-spark-iceberg
+    ports:
+      - "8094:8080"
+      - "10000:10000"
+      - "10001:10001"
+    environment:
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin123
+      AWS_REGION: us-east-1
+      ICEBERG_CATALOG__TYPE: rest
+      ICEBERG_CATALOG__URI: http://iceberg-rest:8181
+      ICEBERG_WAREHOUSE: s3://warehouse/
+      ICEBERG_S3__ENDPOINT: http://minio:9000
+      ICEBERG_S3__ACCESS-KEY-ID: minioadmin
+      ICEBERG_S3__SECRET-ACCESS-KEY: minioadmin123
+    depends_on:
+      - minio
+      - iceberg-rest
+    networks:
+      - dataplatform
+
+  trino:
+    image: trinodb/trino:436
+    hostname: trino
+    container_name: ems-trino
+    ports:
+      - "8089:8080"
+    environment:
+      TRINO_ENVIRONMENT: development
+    volumes:
+      - ./config/trino/etc:/etc/trino
+      - ./config/trino/data:/data
+      - trino-data:/data/trino/vol
+    depends_on:
+      - minio
+    networks:
+      - dataplatform
+
+  hive-metastore:
+    image: prismicio/hive-metastore:3.0.0
+    hostname: hive-metastore
+    container_name: ems-hive-metastore
+    ports:
+      - "9083:9083"
+    profiles:
+      - storage
+    environment:
+      HIVE_METASTORE_DRIVER: org.postgresql.Driver
+      HIVE_METASTORE_JDBC_URL: jdbc:postgresql://postgres-events:5432/postgres
+      HIVE_METASTORE_USER: emsuser
+      HIVE_METASTORE_PASSWORD: emspass123
+      HIVE_METASTORE_WAREHOUSE_DIR: s3://warehouse/hive
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin123
+    depends_on:
+      - postgres-events
+    networks:
+      - dataplatform

@@ -1,0 +1,53 @@
+# ============================================================
+# Redis Stack - Caching
+# ============================================================
+
+services:
+  redis:
+    image: redis:7-alpine
+    hostname: redis
+    container_name: ems-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass redispass123 --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    networks:
+      - dataplatform
+
+  redis-local:
+    image: redis:7-alpine
+    hostname: redis-local
+    container_name: ems-redis-local
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-local-data:/data
+    networks:
+      - dataplatform
+
+  redis-airflow:
+    image: redis:7-alpine
+    hostname: redis-airflow
+    container_name: ems-redis-airflow
+    ports:
+      - "6381:6379"
+    volumes:
+      - redis-airflow:/data
+    networks:
+      - dataplatform
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    hostname: redis-commander
+    container_name: ems-redis-commander
+    ports:
+      - "8096:8081"
+    environment:
+      REDIS_HOSTS: local:redis-local:6379
+      HTTP_PASSWORD: admin123
+    depends_on:
+      - redis
+    networks:
+      - dataplatform

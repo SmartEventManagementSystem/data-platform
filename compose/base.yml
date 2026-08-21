@@ -1,0 +1,32 @@
+# ============================================================
+# Base Configuration - Shared by all modules
+# ============================================================
+
+networks:
+  dataplatform:
+    name: ems-dataplatform
+    driver: bridge
+
+volumes:
+  kafka-data:
+  kafka-connect-data:
+  postgres-airflow:
+  postgres-superset:
+  postgres-om:
+  postgres-events:
+  mongodb-data:
+  minio-data:
+  elasticsearch-data:
+  redis-airflow:
+  redis-local-data:
+  redis-data:
+  superset-home:
+  airflow-logs:
+  openmetadata-ingestion:
+  flink-jobmanager-data:
+  flink-taskmanager1-data:
+  debezium-data:
+  nifi-data:
+  trino-data:
+  qdrant-data:
+  druid-postgres-data:

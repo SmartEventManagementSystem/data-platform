@@ -1,0 +1,105 @@
+# ============================================================
+# Analytics Stack - Superset, Druid, BigQuery Emulator
+# ============================================================
+
+services:
+  superset:
+    image: apache/superset:4.0.1
+    hostname: superset
+    container_name: ems-superset
+    ports:
+      - "8088:8088"
+    environment:
+      SUPERSET_SECRET_KEY: superset_secret_key_ems_2024_change_in_prod
+      SUPERSET_ADMIN_USER: admin
+      SUPERSET_ADMIN_PASSWORD: admin123
+      SUPERSET_ADMIN_EMAIL: admin@ems.local
+      DATABASE_HOST: postgres-superset
+      DATABASE_PORT: 5432
+      DATABASE_DB: superset
+      DATABASE_USER: superset
+      DATABASE_PASSWORD: superset123
+    volumes:
+      - superset-home:/app/superset_home
+    depends_on:
+      - postgres-superset
+    networks:
+      - dataplatform
+
+  # ============================================================
+  # Apache Druid (OLAP Analytics)
+  # ============================================================
+  druid-postgres:
+    image: postgres:15-alpine
+    hostname: druid-postgres
+    container_name: ems-druid-postgres
+    environment:
+      POSTGRES_USER: druid
+      POSTGRES_PASSWORD: druid123
+      POSTGRES_DB: druid
+    volumes:
+      - druid-postgres-data:/var/lib/postgresql/data
+    networks:
+      - dataplatform
+
+  druid-zk:
+    image: zookeeper:3.9
+    hostname: druid-zk
+    container_name: ems-druid-zk
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_INIT_LIMIT: 10
+      ZOOKEEPER_SYNC_LIMIT: 5
+      ZOOKEEPER_SERVERS: druid-zk:2888:3888
+    networks:
+      - dataplatform
+
+  druid-broker:
+    image: apache/druid:28.0.0
+    hostname: druid-broker
+    container_name: ems-druid-broker
+    ports:
+      - "8092:8082"
+    environment:
+      DRUID_INockerEnvironment: postgres
+      DRUID_METADATA_STORAGE_URL: jdbc:postgresql://druid-postgres:5432/druid
+      DRUID_METADATA_STORAGE_USER: druid
+      DRUID_METADATA_STORAGE_PASSWORD: druid123
+      DRUID_ZOOKEEPER_HOSTS: druid-zk:2181
+    depends_on:
+      - druid-postgres
+      - druid-zk
+    networks:
+      - dataplatform
+
+  # ============================================================
+  # BigQuery Emulator (for local development)
+  # ============================================================
+  bigquery-emulator:
+    image: ghcr.io/gretchenweitzner/google-cloud-bigtable-emulator:0.0.4
+    hostname: bigquery-emulator
+    container_name: ems-bigquery-emulator
+    ports:
+      - "9050:9050"
+    profiles:
+      - analytics
+    command: ["bigtable"]
+    networks:
+      - dataplatform
+
+  bigquery-server:
+    image: mjendet/bigquery-emulator:latest
+    hostname: bigquery-server
+    container_name: ems-bigquery-server
+    ports:
+      - "9051:9050"
+    profiles:
+      - analytics
+    environment:
+      BQ_EMULATOR_PORT: 9050
+      BQ_PROJECT_ID: ems-analytics
+      BQ_DATASET: events
+    volumes:
+      - ./config/bigquery:/data
+    networks:
+      - dataplatform
