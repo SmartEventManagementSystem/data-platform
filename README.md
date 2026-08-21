@@ -2,45 +2,47 @@
 
 ## Overview
 
-Full data infrastructure for the Event Management System platform, built with modern data engineering tools.
+Data infrastructure for the Event Management System platform, built with modern data engineering tools.
+
+**Note:** Uses PostgreSQL as the primary database driver (not MySQL).
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                           EMS Data Platform                                   │
+│                           EMS Data Platform                                  │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                    │
-│  │  PostgreSQL  │    │   MongoDB    │    │    MySQL     │  Data Sources     │
-│  │   Events     │    │  Analytics   │    │   Legacy     │                    │
-│  └──────┬───────┘    └──────┬───────┘    └──────┬───────┘                    │
+│                                                                             │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                   │
+│  │  PostgreSQL  │    │   MongoDB    │    │  PostgreSQL  │  Data Sources     │
+│  │   Events     │    │  Analytics   │    │ OpenMetadata │                   │
+│  └──────┬───────┘    └──────┬───────┘    └──────┬───────┘                   │
 │         │                   │                   │                            │
 │         └───────────────────┼───────────────────┘                            │
-│                             ▼                                                  │
-│                   ┌───────────────────┐                                       │
+│                             ▼                                                │
+│                   ┌───────────────────┐                                      │
 │                   │     Debezium       │  CDC                                 │
-│                   │     (Kafka)       │                                       │
-│                   └─────────┬──────────┘                                       │
-│                             │                                                  │
-│         ┌───────────────────┼───────────────────┐                             │
-│         ▼                   ▼                   ▼                             │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐                      │
-│  │    Kafka    │    │  Airflow    │    │   Flink     │                      │
-│  │  Streaming  │    │  Pipeline   │    │   Stream    │                      │
-│  └──────┬──────┘    └──────┬──────┘    └──────┬──────┘                      │
-│         │                  │                  │                             │
-│         ▼                  ▼                  ▼                              │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐                      │
-│  │  Superset   │    │   Iceberg   │    │    Trino    │                      │
-│  │    BI       │    │   Lakehouse │    │   Query     │                      │
-│  └─────────────┘    └─────────────┘    └──────┬──────┘                      │
-│                              │                 │                              │
-│                              ▼                 ▼                              │
-│                     ┌─────────────────────┐                                   │
-│                     │     MinIO (S3)      │  Storage                         │
-│                     │   + OpenMetadata    │  + Catalog                       │
-│                     └─────────────────────┘                                   │
+│                   │     (Kafka)       │                                      │
+│                   └─────────┬──────────┘                                      │
+│                             │                                                │
+│         ┌───────────────────┼───────────────────┐                            │
+│         ▼                   ▼                   ▼                            │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐                     │
+│  │    Kafka    │    │  OpenMeta    │    │   Flink     │                     │
+│  │  Streaming  │    │   data       │    │   Stream    │                     │
+│  └──────┬──────┘    └─────────────┘    └──────┬──────┘                     │
+│         │                                      │                             │
+│         ▼                                      ▼                             │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐                    │
+│  │   Iceberg   │    │   Trino     │    │    Trino    │                    │
+│  │   Lakehouse │    │   Query     │    │   Query     │                    │
+│  └──────┬──────┘    └──────┬──────┘    └──────┬──────┘                    │
+│         │                   │                   │                            │
+│         └───────────────────┴───────────────────┘                            │
+│                             ▼                                                │
+│                     ┌─────────────────────┐                                  │
+│                     │     MinIO (S3)      │  Storage                        │
+│                     └─────────────────────┘                                  │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -48,60 +50,70 @@ Full data infrastructure for the Event Management System platform, built with mo
 
 | Component | Version | Port | Purpose |
 |-----------|---------|------|---------|
-| **Kafka** | 7.6.0 | 9092 | Event streaming platform |
+| **PostgreSQL** | 15 | 5432 | Event database |
+| **PostgreSQL (OM)** | 15 | 5436 | OpenMetadata database |
+| **PostgreSQL (Airflow)** | 15 | 5434 | Airflow metadata |
+| **PostgreSQL (Superset)** | 15 | 5435 | Superset metadata |
+| **Kafka** | 7.6.0 | 9092 | Event streaming |
 | **Kafka UI** | latest | 8090 | Kafka management UI |
 | **Schema Registry** | 7.6.0 | 8081 | Avro/JSON schema registry |
-| **Kafka Connect** | 7.6.0 | 8083 | CDC connectors |
-| **Airflow** | 2.9.0 | 8085 | Pipeline orchestration |
-| **Superset** | 4.0.1 | 8088 | BI and visualization |
-| **OpenMetadata** | 1.3.0 | 8585 | Data catalog |
+| **OpenMetadata** | 1.7.4 | 8585 | Data catalog |
 | **Elasticsearch** | 8.12.0 | 9200 | Search and indexing |
-| **Iceberg REST** | 1.5.2 | 8181 | Lakehouse catalog |
-| **Spark + Iceberg** | 3.5_1.5.2 | 8080 | SQL on Iceberg |
-| **MinIO** | latest | 9000 | S3-compatible storage |
-| **Trino** | 437 | 8089 | Distributed SQL engine |
-| **NiFi** | 2.0.0 | 8443 | Data flow automation |
-| **Flink** | 1.19.0 | 8083 | Stream processing |
-| **Debezium** | 2.5 | 8086 | CDC |
-| **PostgreSQL** | 15 | 5432-5436 | Relational databases |
+| **Iceberg REST** | 1.6.0 | 8181 | Lakehouse catalog |
+| **MinIO** | latest | 9000/9001 | S3-compatible storage |
+| **Trino** | 436 | 8089 | Distributed SQL engine |
+| **Redis** | 7 | 6379/6380 | Caching |
 | **MongoDB** | 7.0 | 27017 | Document database |
-| **MySQL** | 8.0 | 3306 | Legacy database |
-| **Redis** | 7 | 6379 | Caching |
+| **Flink** | 1.19.0 | 8083 | Stream processing |
+| **Debezium** | 2.5 | 9086 | CDC |
+| **NiFi** | 2.0.0 | 8443 | Data flow automation |
 | **Qdrant** | 1.7.0 | 6333 | Vector database for RAG |
-| **BigQuery Emulator** | latest | 9051 | Analytics warehouse |
-| **Iceberg Catalog** | 1.5.2 | 8181 | Lakehouse metadata |
-| **Hive Metastore** | 3.0.0 | 9083 | Table metadata |
-| **Apache Atlas** | 3.2.1 | 21000 | Data governance |
+
+## Prerequisites
+
+- Docker & Docker Compose (v2+)
+- At least 10GB RAM recommended (16GB for full stack)
+- 50GB disk space
 
 ## Quick Start
 
-### Prerequisites
-
-- Docker & Docker Compose
-- At least 16GB RAM recommended
-- 50GB disk space
-
-### Start All Services
+### 1. Start Core Services (Recommended for Development)
 
 ```bash
 cd data-platform
-
-# Start all services
-docker compose up -d
-
-# Check status
-docker compose ps
-
-# View logs
-docker compose logs -f [service-name]
+./start-local.sh
 ```
 
-### Stop All Services
+This starts essential services:
+- PostgreSQL (events, OpenMetadata, Airflow)
+- Redis
+- Kafka + Zookeeper + Schema Registry
+- Elasticsearch
+- OpenMetadata
+- Trino
+- MinIO + Iceberg REST
+
+### 2. Start All Services (Full Stack)
+
+```bash
+cd data-platform
+docker compose up -d
+```
+
+### 3. Check Status
+
+```bash
+./start-local.sh --status
+# or
+docker compose ps
+```
+
+### 4. Stop Services
 
 ```bash
 docker compose down
 
-# Remove volumes (WARNING: deletes all data)
+# Stop and remove volumes (WARNING: deletes all data)
 docker compose down -v
 ```
 
@@ -109,36 +121,24 @@ docker compose down -v
 
 | Service | URL | Credentials |
 |---------|-----|------------|
-| Airflow | http://localhost:8085 | admin / admin123 |
-| Superset | http://localhost:8088 | admin / admin123 |
-| OpenMetadata | http://localhost:8585 | admin / admin123 |
-| Kafka UI | http://localhost:8090 | - |
-| Flink | http://localhost:8083 | - |
-| Spark UI | http://localhost:8080 | - |
-| MinIO Console | http://localhost:9001 | minioadmin / minioadmin123 |
-| Trino | http://localhost:8089 | - |
-| NiFi | https://localhost:8443 | - |
-| Elasticsearch | http://localhost:9200 | - |
-| Qdrant | http://localhost:6333 | - |
-| MinIO API | http://localhost:9000 | minioadmin / minioadmin123 |
-| Hive Metastore | http://localhost:9083 | - |
+| **OpenMetadata** | http://localhost:8585 | admin / admin123 |
+| **Kafka UI** | http://localhost:8090 | - |
+| **MinIO Console** | http://localhost:9001 | minioadmin / minioadmin123 |
+| **Trino** | http://localhost:8089 | - |
+| **Elasticsearch** | http://localhost:9200 | - |
+| **Qdrant** | http://localhost:6333 | - |
+| **NiFi** | https://localhost:8443 | - |
+| **Flink** | http://localhost:8083 | - |
+| **MongoDB** | localhost:27017 | emsuser / emspass123 |
 
-## Data Flow
+## Database Connections
 
-### 1. Event Streaming (Kafka)
-```
-PostgreSQL → Debezium → Kafka Topics → Flink/Spark → Iceberg
-```
-
-### 2. Pipeline Orchestration (Airflow)
-```
-Source DBs → Extract → Transform → Load → Iceberg → Superset
-```
-
-### 3. Real-time Analytics (Flink)
-```
-Kafka Events → Flink Stream → Real-time Aggregations → Dashboard
-```
+| Database | Host | Port | User | Password | Database |
+|----------|------|------|------|----------|----------|
+| Events | postgres-events | 5432 | emsuser | emspass123 | ems_events |
+| OpenMetadata | postgres-om | 5436 | openmetadata | openmetadata123 | openmetadata_db |
+| Airflow | postgres-airflow | 5434 | airflow | airflow123 | airflow |
+| Superset | postgres-superset | 5435 | superset | superset123 | superset |
 
 ## Kafka Topics
 
@@ -150,73 +150,63 @@ Kafka Events → Flink Stream → Real-time Aggregations → Dashboard
 | `ems.analytics` | User behavior analytics |
 | `ems.notifications` | Push notification events |
 
-## Iceberg Tables
-
-| Table | Description |
-|-------|-------------|
-| `ems.events` | All event data with time travel |
-| `ems.users` | User profiles and preferences |
-| `ems.analytics_events` | Page views, clicks, sessions |
-| `ems.revenue` | Financial aggregations |
-
-## Superset Setup
-
-1. Go to http://localhost:8088
-2. Login with admin / admin123
-3. Add database connection:
-   - Database: PostgreSQL (ems-postgres-events:5432)
-   - Username: emsuser
-   - Password: emspass123
-
 ## OpenMetadata Setup
+
+OpenMetadata is pre-configured with PostgreSQL driver (not MySQL).
 
 1. Go to http://localhost:8585
 2. Login with admin / admin123
 3. Configure services:
-   - Airflow (http://airflow-webserver:8080)
-   - Kafka (kafka:29092)
-   - Database (postgres-events:5432)
+   - Kafka: kafka:29092
+   - Database: postgres-events:5432 (emsuser/emspass123)
 
-## Airflow DAGs
+## Trino Query Engine
 
-### event_analytics_pipeline.py
-Hourly pipeline that:
-1. Extracts events, tickets, attendees from PostgreSQL
-2. Computes analytics metrics
-3. Loads to Kafka for real-time processing
+Connect to Trino for SQL queries across data sources:
 
-### ingestion_pipeline.py
-Daily pipeline that:
-1. Ingests data from PostgreSQL
-2. Ingests analytics from MongoDB
-3. Validates ingestion to Iceberg
-
-### reporting_pipeline.py
-Daily report generation:
-1. Daily event reports
-2. Weekly aggregations
-3. Superset cache refresh
-
-## Development
-
-### Add new DAG
 ```bash
-# Create DAG file
-touch dags/my_dag.py
+# Using trino CLI (install first)
+trino --server http://localhost:8089
 
-# DAG will be auto-loaded by Airflow
+# Or connect via Superset
+# http://localhost:8088
 ```
 
-### Connect new database to OpenMetadata
+### Trino Catalogs
+
+| Catalog | Description |
+|---------|-------------|
+| `postgres` | PostgreSQL events database |
+| `postgresql` | PostgreSQL (Iceberg config) |
+| `iceberg` | Iceberg tables via MinIO |
+
+## Iceberg + MinIO (Lakehouse)
+
+MinIO is configured with Iceberg REST catalog:
+
 ```bash
-# Register in OpenMetadata UI
-# Or use API:
-curl -X POST http://localhost:8585/api/v1/services/databaseServices \
-  -H "Content-Type: application/json" \
-  -d @config/om-database.json
+# Access MinIO Console
+http://localhost:9001
+# Credentials: minioadmin / minioadmin123
+
+# Buckets created:
+# - warehouse (Iceberg data)
+# - spark-warehouse
+# - datalake
 ```
 
 ## Troubleshooting
+
+### OpenMetadata not starting
+```bash
+# Check PostgreSQL for OpenMetadata is healthy
+docker compose ps postgres-om
+
+# Check logs
+docker compose logs openmetadata
+
+# May take 2-3 minutes on first start
+```
 
 ### Kafka not starting
 ```bash
@@ -224,17 +214,8 @@ curl -X POST http://localhost:8585/api/v1/services/databaseServices \
 docker compose logs zookeeper
 
 # Reset Kafka
-docker compose down -v
-docker compose up -d
-```
-
-### Airflow not connecting to PostgreSQL
-```bash
-# Check network
-docker network inspect ems-dataplatform
-
-# Recreate containers
-docker compose restart airflow-webserver
+docker compose down
+docker compose up -d kafka zookeeper
 ```
 
 ### MinIO buckets not created
@@ -243,18 +224,36 @@ docker compose restart airflow-webserver
 docker compose exec mc /bin/sh -c "mc alias set ems http://minio:9000 minioadmin minioadmin123 && mc mb ems/warehouse"
 ```
 
-## Environment Variables
+### Trino not connecting to catalogs
+```bash
+# Check catalog configs
+cat config/trino/etc/catalog/*.properties
 
-All sensitive values should be overridden in production:
+# Restart Trino
+docker compose restart trino
+```
+
+## Development
+
+### Adding New Services
+
+Add new services to `docker-compose.yml`. Use `postgres-om` as template for PostgreSQL-based services.
+
+### Connecting to PostgreSQL from Host
 
 ```bash
-# Create .env file
-cat > .env << EOF
-POSTGRES_PASSWORD=secure_password_here
-REDIS_PASSWORD=secure_password_here
-SUPERSET_SECRET_KEY=secure_key_here
-MINIO_ROOT_PASSWORD=secure_password_here
-EOF
+# Events database
+psql -h localhost -p 5432 -U emsuser -d ems_events
+
+# OpenMetadata database
+psql -h localhost -p 5436 -U openmetadata -d openmetadata_db
+```
+
+### Running SQL Scripts
+
+```bash
+# Initialize events database
+docker compose exec -T postgres-events psql -U emsuser -d ems_events < scripts/init-postgres-events.sql
 ```
 
 ## License

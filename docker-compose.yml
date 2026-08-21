@@ -1,9 +1,11 @@
 version: '3.8'
 
 # ============================================================
-# EMS Data Platform - Full Data Infrastructure
-# Components: OpenMetadata, Airflow, Kafka, Superset,
-# BigQuery (emulator), Iceberg, Postgres, MySQL, MongoDB
+# EMS Data Platform - Local Development
+# Components: OpenMetadata (PostgreSQL), Kafka, Trino,
+# Iceberg, MinIO, PostgreSQL, Redis, MongoDB
+#
+# For full platform with Airflow/Superset: use --profile flag
 # ============================================================
 
 services:
@@ -57,7 +59,7 @@ services:
     depends_on:
       - kafka
     ports:
-      - "8082:8082"
+      - "8093:8082"
     environment:
       KAFKA_REST_HOST_NAME: kafka-rest
       KAFKA_REST_BOOTSTRAP_SERVERS: kafka:29092
@@ -91,7 +93,9 @@ services:
       - kafka
       - schema-registry
     ports:
-      - "8083:8083"
+      - "9093:8083"
+    profiles:
+      - connectors
     environment:
       CONNECT_BOOTSTRAP_SERVERS: kafka:29092
       CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
@@ -151,7 +155,7 @@ services:
     hostname: redis-airflow
     container_name: ems-redis-airflow
     ports:
-      - "6379:6379"
+      - "6381:6379"
     volumes:
       - redis-airflow:/data
     networks:
@@ -168,7 +172,7 @@ services:
       AIRFLOW__CORE__EXECUTOR: CeleryExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow123@postgres-airflow:5432/airflow
       AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow123@postgres-airflow:5432/airflow
-      AIRFLOW__CELERY__BROKER_URL: redis://:@redis-airflow:6379/0
+      AIRFLOW__CELERY__BROKER_URL: redis://:@redis-airflow:6381/0
       AIRFLOW__CORE__FERNET_KEY: D5k7VhVYGpLqII8dXCvqRUW3V3e8xQ9mNpK2sT4wX7Y=
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
       AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
@@ -182,9 +186,10 @@ services:
       - ./dags:/opt/airflow/dags
       - ./scripts:/opt/airflow/scripts
       - ./plugins:/opt/airflow/plugins
-    command: version
+    command: bash -c "airflow db migrate && airflow users create -r Admin -u admin -e admin@ems.local -p admin123 -f Admin -l User || true"
     networks:
       - dataplatform
+    restart: "no"
 
   airflow-webserver:
     image: apache/airflow:2.9.0-python3.11
@@ -198,7 +203,7 @@ services:
       AIRFLOW__CORE__EXECUTOR: CeleryExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow123@postgres-airflow:5432/airflow
       AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow123@postgres-airflow:5432/airflow
-      AIRFLOW__CELERY__BROKER_URL: redis://:@redis-airflow:6379/0
+      AIRFLOW__CELERY__BROKER_URL: redis://:@redis-airflow:6381/0
       AIRFLOW__CORE__FERNET_KEY: D5k7VhVYGpLqII8dXCvqRUW3V3e8xQ9mNpK2sT4wX7Y=
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
       AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
@@ -229,7 +234,7 @@ services:
       AIRFLOW__CORE__EXECUTOR: CeleryExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow123@postgres-airflow:5432/airflow
       AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow123@postgres-airflow:5432/airflow
-      AIRFLOW__CELERY__BROKER_URL: redis://:@redis-airflow:6379/0
+      AIRFLOW__CELERY__BROKER_URL: redis://:@redis-airflow:6381/0
       AIRFLOW__CORE__FERNET_KEY: D5k7VhVYGpLqII8dXCvqRUW3V3e8xQ9mNpK2sT4wX7Y=
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
       AIRFLOW__SCHEDULER__MAX_TI_RUNS: 5
@@ -255,7 +260,7 @@ services:
       AIRFLOW__CORE__EXECUTOR: CeleryExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow123@postgres-airflow:5432/airflow
       AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow123@postgres-airflow:5432/airflow
-      AIRFLOW__CELERY__BROKER_URL: redis://:@redis-airflow:6379/0
+      AIRFLOW__CELERY__BROKER_URL: redis://:@redis-airflow:6381/0
       AIRFLOW__CORE__FERNET_KEY: D5k7VhVYGpLqII8dXCvqRUW3V3e8xQ9mNpK2sT4wX7Y=
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     volumes:
@@ -279,7 +284,7 @@ services:
       AIRFLOW__CORE__EXECUTOR: CeleryExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow123@postgres-airflow:5432/airflow
       AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow123@postgres-airflow:5432/airflow
-      AIRFLOW__CELERY__BROKER_URL: redis://:@redis-airflow:6379/0
+      AIRFLOW__CELERY__BROKER_URL: redis://:@redis-airflow:6381/0
       AIRFLOW__CORE__FERNET_KEY: D5k7VhVYGpLqII8dXCvqRUW3V3e8xQ9mNpK2sT4wX7Y=
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     volumes:
@@ -342,7 +347,7 @@ services:
     environment:
       POSTGRES_USER: openmetadata
       POSTGRES_PASSWORD: openmetadata123
-      POSTGRES_DB: openmetadata
+      POSTGRES_DB: openmetadata_db
     ports:
       - "5436:5432"
     volumes:
@@ -365,48 +370,46 @@ services:
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - ES_JAVA_OPTS=-Xms2g -Xmx2g
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
       - xpack.security.enrollment.enabled=false
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
     networks:
       - dataplatform
     healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:9200 | grep -q 'cluster_name'"]
+      test: ["CMD-SHELL", "curl -s -u elastic:elastic123 http://localhost:9200 | grep -q 'cluster_name'"]
+      start_period: 60s
       interval: 30s
       timeout: 10s
       retries: 5
 
+  # ============================================================
+  # OpenMetadata (Data Discovery & Catalog) - PostgreSQL
+  # ============================================================
   openmetadata:
-    image: openmetadata/server:1.3.0
+    image: openmetadata/server:1.7.4
     hostname: openmetadata
     container_name: ems-openmetadata
     ports:
       - "8585:8585"
       - "8586:8586"
     environment:
-      # Database
       DB_HOST: postgres-om
       DB_PORT: 5432
       DB_USER: openmetadata
-      DB_PASSWORD: openmetadata123
+      DB_USER_PASSWORD: openmetadata123
       DB_SCHEME: postgresql
-      DB_DATABASE_NAME: openmetadata
-      # OpenMetadata
-      OPENMETADATA_VERSION: 1.3.0
+      OM_DATABASE: openmetadata_db
+      OPENMETADATA_VERSION: 1.7.4
       SERVER_PORT: 8585
       LOG_LEVEL: INFO
-      # Authentication
       CUSTOM_OIDC_AUTHENTICATION_ENABLED: 'false'
-      # Airflow
       AIRFLOW_HOST: airflow-webserver
       AIRFLOW_USERNAME: admin
       AIRFLOW_PASSWORD: admin123
       AIRFLOW_PORT: 8080
-      # Elasticsearch
-      ELASTICSERACH_HOST: elasticsearch
-      ELASTICSERACH_PORT: 9200
-      # Kafka
+      ELASTICSEARCH_HOST: elasticsearch
+      ELASTICSEARCH_PORT: 9200
       KAFKA_BOOTSTRAPERS: kafka:29092
       KAFKA_SCHEMAREGISTRY: http://schema-registry:8081
     depends_on:
@@ -417,13 +420,14 @@ services:
     networks:
       - dataplatform
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8585/healthcheck"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8585/healthcheck || exit 1"]
       interval: 30s
-      timeout: 10s
-      retries: 10
+      timeout: 15s
+      retries: 30
+    restart: unless-stopped
 
   openmetadata-ingestion:
-    image: openmetadata/ingestion:1.3.0
+    image: openmetadata/ingestion:1.7.4
     hostname: openmetadata-ingestion
     container_name: ems-openmetadata-ingestion
     depends_on:
@@ -435,14 +439,15 @@ services:
       DB_HOST: postgres-om
       DB_PORT: 5432
       DB_USER: openmetadata
-      DB_PASSWORD: openmetadata123
+      DB_USER_PASSWORD: openmetadata123
       DB_SCHEME: postgresql
-      DB_DATABASE_NAME: openmetadata
+      OM_DATABASE: openmetadata_db
     volumes:
       - ./dags:/opt/airflow/dags
       - openmetadata-ingestion:/opt/airflow
     networks:
       - dataplatform
+    restart: unless-stopped
 
   # ============================================================
   # Apache Iceberg + MinIO (S3-compatible Storage)
@@ -491,7 +496,7 @@ services:
       - dataplatform
 
   iceberg-rest:
-    image: tabulario/iceberg-rest:1.5.2
+    image: tabulario/iceberg-rest:1.6.0
     hostname: iceberg-rest
     container_name: ems-iceberg-rest
     ports:
@@ -510,11 +515,11 @@ services:
       - dataplatform
 
   spark-iceberg:
-    image: tabulario/spark-iceberg:3.5_1.5.2
+    image: tabulario/spark-iceberg:3.5.5_1.8.1
     hostname: spark-iceberg
     container_name: ems-spark-iceberg
     ports:
-      - "8080:8080"
+      - "8094:8080"
       - "10000:10000"
       - "10001:10001"
     environment:
@@ -571,27 +576,7 @@ services:
       timeout: 10s
       retries: 5
 
-  mysql:
-    image: mysql:8.0
-    hostname: mysql
-    container_name: ems-mysql
-    ports:
-      - "3306:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD: rootpass123
-      MYSQL_DATABASE: ems_legacy
-      MYSQL_USER: emsuser
-      MYSQL_PASSWORD: emspass123
-    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
-    volumes:
-      - mysql-data:/var/lib/mysql
-    networks:
-      - dataplatform
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpass123"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+  # MySQL removed - using PostgreSQL for all databases
 
   # ============================================================
   # Apache Flink (Stream Processing)
@@ -648,7 +633,7 @@ services:
     hostname: debezium
     container_name: ems-debezium
     ports:
-      - "8086:8080"
+      - "9086:8080"
     environment:
       OFFSET_STORAGE_FILE_FILENAME: /opt/debezium/data/offsets.dat
       CONFIG_STORAGE_FILE_FILENAME: /opt/debezium/data/connectors.dat
@@ -662,17 +647,17 @@ services:
   # Trino (SQL Query Engine)
   # ============================================================
   trino:
-    image: trinodb/trino:437
+    image: trinodb/trino:436
     hostname: trino
     container_name: ems-trino
     ports:
       - "8089:8080"
     environment:
-      TRINO_ENVIRONMENT: production
-      TRINO_LAUNCHER_OPTS: -Xmx4G
+      TRINO_ENVIRONMENT: development
     volumes:
-      - ./config/trino:/etc/trino
-      - trino-data:/data
+      - ./config/trino/etc:/etc/trino
+      - ./config/trino/data:/data
+      - trino-data:/data/trino/vol
     depends_on:
       - minio
     networks:
@@ -716,14 +701,26 @@ services:
     networks:
       - dataplatform
 
+  redis-local:
+    image: redis:7-alpine
+    hostname: redis-local
+    container_name: ems-redis-local
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-local-data:/data
+    networks:
+      - dataplatform
+
   redis-commander:
     image: rediscommander/redis-commander:latest
     hostname: redis-commander
     container_name: ems-redis-commander
     ports:
-      - "8084:8081"
+      - "8096:8081"
     environment:
-      REDIS_HOSTS: local:redis:6379
+      REDIS_HOSTS: local:redis-local:6379
       HTTP_PASSWORD: admin123
     depends_on:
       - redis
@@ -766,6 +763,8 @@ services:
     command: ["bigtable"]
     networks:
       - dataplatform
+    profiles:
+      - analytics
 
   bigquery-server:
     image: mjendet/bigquery-emulator:latest
@@ -781,17 +780,19 @@ services:
       - ./config/bigquery:/data
     networks:
       - dataplatform
+    profiles:
+      - analytics
 
   # ============================================================
   # Apache Iceberg REST Catalog (enhanced)
   # ============================================================
   iceberg-catalog:
-    image: tabulario/iceberg-rest:1.5.2
+    image: tabulario/iceberg-rest:1.6.0
     hostname: iceberg-catalog
     container_name: ems-iceberg-catalog
     ports:
-      - "8181:8181"
-      - "8182:8182"
+      - "8183:8181"
+      - "8184:8182"
     environment:
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin123
@@ -818,14 +819,14 @@ services:
   # Apache Hive Metastore (for Iceberg tables)
   # ============================================================
   hive-metastore:
-    image: b-architects/hive-metastore:3.0.0
+    image: prismicio/hive-metastore:3.0.0
     hostname: hive-metastore
     container_name: ems-hive-metastore
     ports:
       - "9083:9083"
     environment:
       HIVE_METASTORE_DRIVER: org.postgresql.Driver
-      HIVE_METASTORE_JDBC_URL: jdbc:postgresql://postgres-events:5432/metastore
+      HIVE_METASTORE_JDBC_URL: jdbc:postgresql://postgres-events:5432/postgres
       HIVE_METASTORE_USER: emsuser
       HIVE_METASTORE_PASSWORD: emspass123
       HIVE_METASTORE_WAREHOUSE_DIR: s3://warehouse/hive
@@ -836,28 +837,16 @@ services:
       - postgres-events
     networks:
       - dataplatform
+    profiles:
+      - storage
 
   # ============================================================
-  # Apache Atlas (Data Governance)
+  # Apache Atlas (Data Governance) - Skipped, requires HBase/Solr
+  # Use OpenMetadata or DataHub instead for metadata catalog
   # ============================================================
-  atlas:
-    image: apache/atlas:3.2.1
-    hostname: atlas
-    container_name: ems-atlas
-    ports:
-      - "21000:21000"
-    environment:
-      ATLAS_SERVER_TYPE: standalone
-      ATLAS_FALKONRY_ENABLED: 'false'
-      ATLAS_INDEX_SEARCH_URI: http://elasticsearch:9200
-      ATLAS_GRAPH_DB_HOSTNAME: atlas-elasticsearch
-      JAVA_OPTS: -Xmx2g -Xms1g
-    depends_on:
-      - elasticsearch
-    volumes:
-      - atlas-data:/opt/hadoop/data
-    networks:
-      - dataplatform
+  # atlas:
+  #   image: ghcr.io/datastax/atlas:latest
+  #   ...
 
   # ============================================================
   # Apache Druid (OLAP Analytics)
@@ -892,7 +881,7 @@ services:
     hostname: druid-broker
     container_name: ems-druid-broker
     ports:
-      - "8082:8082"
+      - "8092:8082"
     environment:
       DRUID_INockerEnvironment: postgres
       DRUID_METADATA_STORAGE_URL: jdbc:postgresql://druid-postgres:5432/druid
@@ -913,7 +902,7 @@ services:
     hostname: datahub-gms
     container_name: ems-datahub-gms
     ports:
-      - "8080:8080"
+      - "8095:8080"
     environment:
       EBEAN_DATASOURCE_URL: jdbc:postgresql://postgres-om:5432/datahub
       EBEAN_DATASOURCE_USERNAME: openmetadata
@@ -939,13 +928,14 @@ volumes:
   postgres-om:
   postgres-events:
   mongodb-data:
-  mysql-data:
   minio-data:
   elasticsearch-data:
   redis-airflow:
+  redis-local-data:
   redis-data:
   superset-home:
   airflow-logs:
+  openmetadata-data:
   openmetadata-ingestion:
   flink-jobmanager-data:
   flink-taskmanager1-data:
