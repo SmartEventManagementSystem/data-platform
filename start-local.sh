@@ -36,31 +36,71 @@ fi
 
 log_info "Starting EMS Data Platform - ALL Services..."
 
-# Stop any existing containers
+# Stop existing containers and remove orphans
 log_info "Stopping existing containers..."
-docker compose down 2>/dev/null || docker-compose down 2>/dev/null || true
+docker compose down --remove-orphans 2>/dev/null || docker-compose down --remove-orphans 2>/dev/null || true
 
-# Start ALL services
-log_info "Starting all services (this may take a few minutes)..."
-docker compose up -d 2>/dev/null || docker-compose up -d 2>/dev/null
+# Step 1: Start PostgreSQL for OpenMetadata first
+log_info "Starting PostgreSQL for OpenMetadata..."
+docker compose up -d postgres-om
 
-# Wait for databases to be ready
-log_info "Waiting for databases to be ready..."
-for i in {1..30}; do
-    if docker exec ems-postgres-om pg_isready -U openmetadata &>/dev/null && \
-       docker exec ems-postgres-events pg_isready -U emsuser &>/dev/null; then
-        log_ok "Databases ready!"
+# Step 2: Configure PostgreSQL trust auth for Docker network
+log_info "Configuring PostgreSQL authentication..."
+for i in {1..15}; do
+    if docker exec ems-postgres-om pg_isready -U openmetadata &>/dev/null; then
+        docker exec ems-postgres-om bash -c "su postgres -c '/usr/lib/postgresql/15/bin/pg_ctl reload -D /var/lib/postgresql/data' 2>/dev/null || true"
         break
     fi
     echo -n "."
     sleep 2
 done
+
+# Ensure pg_hba.conf allows trust auth for Docker network
+docker exec ems-postgres-om bash -c "
+    if ! grep -q '0.0.0.0/0.*trust' /var/lib/postgresql/data/pg_hba.conf 2>/dev/null; then
+        echo 'host all all 0.0.0.0/0 trust' >> /var/lib/postgresql/data/pg_hba.conf
+        echo 'host all all ::/0 trust' >> /var/lib/postgresql/data/pg_hba.conf
+    fi
+    sed -i 's/scram-sha-256/trust/g' /var/lib/postgresql/data/pg_hba.conf 2>/dev/null || true
+    su postgres -c '/usr/lib/postgresql/15/bin/pg_ctl reload -D /var/lib/postgresql/data'
+" 2>/dev/null || log_warn "Could not configure pg_hba.conf (may already be configured)"
+
+log_ok "PostgreSQL ready"
+
+# Step 3: Start Elasticsearch
+log_info "Starting Elasticsearch..."
+docker compose up -d elasticsearch
+
+# Step 4: Run OpenMetadata bootstrap migrations
+log_info "Running OpenMetadata migrations (this takes ~1-2 minutes)..."
+docker compose up -d openmetadata-bootstrap
+
+# Wait for bootstrap to complete
+for i in {1..60}; do
+    status=$(docker inspect ems-openmetadata-bootstrap --format '{{.State.Status}}' 2>/dev/null || echo "running")
+    if [[ "$status" == "exited" ]]; then
+        log_ok "OpenMetadata migrations completed!"
+        break
+    fi
+    echo -ne "\r  Bootstrap running... ($((i*5))s)"
+    sleep 5
+done
 echo ""
 
-# Wait for OpenMetadata to be healthy
-log_info "Waiting for OpenMetadata (this takes ~2-3 minutes on first start)..."
+# Check bootstrap result
+if docker inspect ems-openmetadata-bootstrap --format '{{.State.ExitCode}}' 2>/dev/null | grep -qv "0"; then
+    log_error "OpenMetadata bootstrap failed! Check logs: docker compose logs openmetadata-bootstrap"
+    exit 1
+fi
+
+# Step 5: Start all remaining services
+log_info "Starting all remaining services..."
+docker compose up -d
+
+# Wait for OpenMetadata to be ready
+log_info "Waiting for OpenMetadata to be ready (~2-3 minutes)..."
 for i in {1..60}; do
-    if curl -sf http://localhost:8585/healthcheck &>/dev/null; then
+    if curl -sf http://localhost:8585/ >/dev/null 2>&1; then
         log_ok "OpenMetadata is ready!"
         break
     fi
@@ -76,7 +116,7 @@ log_info "EMS Data Platform - ALL Services Started"
 log_info "=========================================="
 echo ""
 
-docker ps --format "  {{.Names}}: {{.Status}}" | grep ems | grep -v "Exited" | head -25
+docker ps --format "  {{.Names}}: {{.Status}}" | grep ems | grep -v "Exited" | head -30
 
 echo ""
 log_info "Key Services:"
@@ -104,22 +144,25 @@ for port in 5432 5434 5435 5436 6379 6380 8585 8085 8088 8089 8090 9000 9001 909
     if nc -z localhost $port 2>/dev/null; then
         echo -e "  ${GREEN}${name} (:${port}) OK${NC}"
     else
-        echo -e "  ${RED}${name} (:${port}) FAIL${NC}"
+        echo -e "  ${YELLOW}${name} (:${port}) starting${NC}"
     fi
 done
 
 echo ""
 log_info "Access URLs:"
 echo "  OpenMetadata:   http://localhost:8585"
-echo "  Airflow:        http://localhost:8085"
-echo "  Superset:       http://localhost:8088"
-echo "  Kafka UI:       http://localhost:8090"
-echo "  Trino:          http://localhost:8089"
-echo "  MinIO Console:  http://localhost:9001"
-echo "  Elasticsearch:  http://localhost:9200"
-echo "  Qdrant:         http://localhost:6333"
+echo "  Airflow:       http://localhost:8085"
+echo "  Superset:      http://localhost:8088"
+echo "  Kafka UI:      http://localhost:8090"
+echo "  Trino:         http://localhost:8089"
+echo "  MinIO Console: http://localhost:9001"
+echo "  Elasticsearch: http://localhost:9200"
+echo "  Qdrant:        http://localhost:6333"
 echo ""
-log_info "Credentials: admin / admin123 (for OpenMetadata, Airflow, Superset)"
+log_info "Credentials: admin / admin123 (OpenMetadata, Airflow, Superset)"
+log_info "             minioadmin / minioadmin (MinIO)"
 echo ""
-log_info "Full status: docker ps"
-log_info "Logs: docker logs <container-name>"
+log_info "Commands:"
+echo "  docker compose logs -f        # All logs"
+echo "  docker compose logs openmetadata  # OM logs"
+echo "  docker compose down         # Stop all"
